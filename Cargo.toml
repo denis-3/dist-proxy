@@ -1,0 +1,15 @@
+[package]
+name = "Dist. Proxy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.11.22", features = ["json"] }
+secp256k1 = "0.28.0"
+serde = "1.0.189"
+serde_derive = "1.0.189"
+serde_json = "1.0.107"
+sha2 = "0.10.7"
+tokio = { version = "1.32.0", features = ["full"] }
+url = "2.4.1"
+warp = "0.3.6"
