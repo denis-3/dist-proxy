@@ -45,7 +45,7 @@ async fn reqwest_url(url: &String, method: &str, body: Option<&serde_json::Value
     let response_maybe= if method == "get" {
 		client.get(url).send().await
 	} else if method == "post" {
-		if body == None {
+		if body.is_none() {
 			unimplemented!("No post request without body");
 		}
 		client.post(url).json(&body.unwrap()).send().await
@@ -370,7 +370,7 @@ async fn main() {
 							let receive_amt: u128 = com_data[2].parse().unwrap_or(0);
 							let check_str_3 = format!("0000000000000000000{:x}\"", receive_amt);
 							println!("Received data from RPC: \n{}", query_data);
-							if !query_data_clean.contains(&check_str_1) ||
+							if !query_data_clean.contains(check_str_1) ||
 								!query_data_clean.contains(&check_str_2) ||
 								!query_data_clean.contains(&check_str_3) {
 									return;
@@ -400,7 +400,7 @@ async fn main() {
 			} else { "Data added." });
 
 			let res = JsonResponse {
-				result: result
+				result
 			};
 
 			warp::reply::with_status(

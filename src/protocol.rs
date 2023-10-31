@@ -194,7 +194,7 @@ pub fn build_balances(highest_block: &u128) {
 	let keys: Vec<_> = balances.keys().cloned().collect();
 	let mut raw_balances_data = String::new();
 	for key in keys {
-		let bal = balances.get(&key).expect("it didnt work").to_owned();
+		let bal = balances.get(&key).unwrap().to_owned();
 		raw_balances_data += &(key + " " + bal.to_string().as_str() + "\n");
 	}
 
@@ -253,64 +253,3 @@ pub fn find_highest_block_num() -> u128 {
 
 	highest_block_num
 }
-
-// fn get_data_from_block(block_num: u128, data_hash: String) -> Result<String, String> {
-// 	let raw_data = read_block_file(&block_num);
-// 	let raw_data_split = &raw_data.split("\n").collect::<Vec<_>>();
-// 	let content_data = raw_data_split[6..].join("\n");
-// 	let data_count = raw_data_split[3].parse().unwrap();
-// 	let mut pointer_pos = 0;
-//
-// 	for _i in 0..data_count {
-// 		let this_data_hash = &content_data[pointer_pos..=(pointer_pos + 63)];
-// 		let mut stop_forward_look_flag = false;
-// 		pointer_pos += 65;
-// 		let mut pointer_offset = 0;
-// 		while stop_forward_look_flag == false {
-// 			let this_char = content_data.chars().nth(pointer_pos + pointer_offset).unwrap();
-// 			// check each character until it is not numeric
-// 			if !this_char.is_numeric() {
-// 				stop_forward_look_flag = true;
-// 			} else {
-// 				pointer_offset += 1;
-// 			}
-// 		}
-// 		let this_data_size: usize = content_data[pointer_pos..(pointer_pos + pointer_offset)]
-// 			.parse().unwrap();
-// 		pointer_pos += pointer_offset + 1;
-// 		if this_data_hash == data_hash {
-// 			return Ok(content_data[pointer_pos..(pointer_pos + this_data_size)].to_string());
-// 		}
-// 		pointer_pos += this_data_size + 1;
-// 	}
-//
-// 	return Err("Data hash not found in block".to_string());
-// }
-
-// fn main() {
-// 	let mut highest_block_num = find_highest_block_num();
-//
-// 	println!("Highest block number: {}", highest_block_num);
-//
-// 	let mut pblock = BlockHeaders {
-// 		number: highest_block_num + 1,
-// 		timestamp: 0, // minutes since epoch
-// 		prev_block_hash: read_block_hash(&highest_block_num),
-// 		block_hash: String::new()
-// 	};
-//
-// 	add_data_to_pblock("A RANDOM123 3");
-// 	add_data_to_pblock("A RANDOM456 1");
-// 	add_data_to_pblock("C RANDOM123 1");
-//
-// 	finalize_pblock(&mut pblock);
-//
-// 	let valid_result = verify_blocks(&(pblock.number - 1));
-// 	println!("Block validity check: {:?}", valid_result);
-//
-// 	build_balances(&(pblock.number - 1));
-//
-// 	println!("Balance of RANDOM123: {}", read_balance(&String::from("RANDOM123")));
-// 	println!("Balance of RANDOM465: {}", read_balance(&String::from("RANDOM456")));
-// 	println!("Balance of MISSING123: {}", read_balance(&String::from("MISSING123")));
-// }

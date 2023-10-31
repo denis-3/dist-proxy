@@ -91,7 +91,7 @@ pub fn read_balance(owner: &String) -> u128 {
 }
 
 pub fn parse_command_string(com_str: &String) -> Result<Vec<String>, String> {
-	if com_str.len() == 0 {
+	if com_str.is_empty() {
 		return Err(String::from("Zero-length string"));
 	}
 
@@ -108,18 +108,5 @@ pub fn parse_command_string(com_str: &String) -> Result<Vec<String>, String> {
 	let data_split = com_str.split(&String::from(" "))
 		.map(String::from)
 		.collect::<Vec<String>>();
-	return Ok(data_split);
+	Ok(data_split)
 }
-
-// pub fn read_prev_block_hash(block_num: u128) -> String {
-// 	if block_num == 0 {
-// 		return quick_sha256(&String::new());
-// 	}
-//
-// 	let mut read_file = fs::File::open("../data/blocks/".to_string() + &block_num.to_string() + ".txt").unwrap();
-// 	let mut raw_data = String::new();
-// 	let _ = read_file.read_to_string(&mut raw_data).unwrap();
-//
-// 	// prev blockhash is always second set of 64 chars
-// 	return raw_data[64..=128].to_string();
-// }
