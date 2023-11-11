@@ -113,6 +113,7 @@ async fn main() {
 	// clear prospective block
 	let _ = fs::OpenOptions::new()
         .write(true)
+		.create(true)
         .truncate(true)
         .open("../data/blocks/_prospective.txt").unwrap();
 

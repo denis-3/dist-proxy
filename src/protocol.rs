@@ -5,6 +5,7 @@ use std::path::Path;
 use std::io::BufReader;
 use std::fs::File;
 use std::io::BufRead;
+use std::ffi::OsStr;
 
 mod helper;
 pub use helper::{
@@ -200,6 +201,7 @@ pub fn build_balances(highest_block: &u128) {
 
 	let mut save_file = fs::OpenOptions::new()
         .write(true)
+		.create(true)
         .truncate(true)
         .open("../data/balances.txt").unwrap();
 
@@ -207,8 +209,13 @@ pub fn build_balances(highest_block: &u128) {
 }
 
 pub fn read_balances_to_var(balances: &mut HashMap<String, u128>) -> Result<(), ()> {
-	let file = File::open("../data/balances.txt").unwrap();
+	let file = File::open("../data/balances.txt");
+	// no changes to balances if file does not exist
+	if file.is_err() {
+		return Ok(());
+	}
 
+	let file = file.unwrap();
 	let reader = BufReader::new(file);
 
 	// read each line in balances file
@@ -240,12 +247,9 @@ pub fn find_highest_block_num() -> u128 {
 	for entry in block_entries {
 		let entry_path = entry.unwrap().path();
 		let is_file = entry_path.is_file();
-		let entry_name = entry_path.file_stem().expect("No entry name").to_string_lossy();
-		let entry_extension = entry_path.extension().expect("No entry extension").to_string_lossy();
-		if entry_name == "_prospective" && entry_extension == "txt" {
-			continue;
-		}
-		let this_block_num: u128 = entry_name.parse().expect("Only number.txt files allowed in /data/block");
+		let entry_name = entry_path.file_stem().unwrap_or(OsStr::new("")).to_string_lossy();
+		let entry_extension = entry_path.extension().unwrap_or(OsStr::new("")).to_string_lossy();
+		let this_block_num: u128 = entry_name.parse().unwrap_or(0);
 		if is_file && entry_extension == "txt" && this_block_num > highest_block_num {
 			highest_block_num = this_block_num;
 		}
