@@ -3,7 +3,6 @@ use std::fs;
 use std::collections::HashMap;
 use std::path::Path;
 use std::io::BufReader;
-use std::fs::File;
 use std::io::BufRead;
 use std::ffi::OsStr;
 
@@ -14,8 +13,9 @@ pub use helper::{
 	read_block_file,
 	read_block_headers,
 	read_block_commands,
-	read_balance,
-	parse_command_string
+	parse_command_string,
+	recover_eth_signer,
+	get_command_cost
 };
 
 #[derive(Debug)]
@@ -105,6 +105,7 @@ pub fn verify_blocks(highest_block: &u128) -> Result<(), (u128, u128)> {
 	}
 
 	let mut balances: HashMap<String, u128> = HashMap::new();
+	let mut nonces: HashMap<String, u128> = HashMap::new();
 
 	let mut prev_bh = BlockHeaders {
 		number: 0,
@@ -145,9 +146,32 @@ pub fn verify_blocks(highest_block: &u128) -> Result<(), (u128, u128)> {
 
 		let this_commands = read_block_commands(&n).unwrap();
 		for com in this_commands {
-			let args = com.1.split(' ').collect::<Vec<&str>>();
+			// commands in block files have the form:
+			// <Command Letter> <Command Args separated by space> <Nonce> <Signature>
+			// args[0] is always address
+			let args = com.1.split(' ').collect::<Vec<&str>>(); // Vec<&str> of agrs
+			// verify signature
+			let expected_nonce = nonces.get(args[0]).unwrap_or(&0).to_owned();
+			let actual_nonce = args[args.len() - 2].parse::<u128>();
+			if actual_nonce != Ok(expected_nonce) {
+				// wrong nonce
+				return Err((n, 10))
+			}
+			let sig = String::from(&com.0) + " " + &args[0..(args.len() - 1)].join(" ");
+			let addr = recover_eth_signer(&sig, args[args.len() - 1]);
+			if let Ok(result) = addr {
+				if result != args[0] {
+					// address mismatch
+					return Err((n, 9));
+				}
+			} else {
+				// error recovering signature
+				return Err((n, 8));
+			}
 			// first argument is always address
 			let mut current_bal = balances.get(args[0]).unwrap_or(&0).to_owned();
+			let mut current_debt = 0;
+			// process command
 			if com.0 == "A" { // A for Add balance
 				let parsed_bal = args[1].parse::<u128>();
 				if let Ok(parsed_bal_ok) = parsed_bal {
@@ -155,24 +179,30 @@ pub fn verify_blocks(highest_block: &u128) -> Result<(), (u128, u128)> {
 				} else {
 					return Err((n, 6));
 				}
-			} else if com.0 == "C" { // C for Check-in
-				if current_bal < 1 {
-					return Err((n, 7));
-				}
-				current_bal -= 1;
+			} else if com.0 == "C" || com.0 == "F" { // C for Check-in
+													// F for add file
+				current_debt += get_command_cost(&com.0, &args);
+				// TODO: perhaps implemenet dynamic file pricing
 			}
+
+			if current_debt > current_bal {
+				// not enough balance to pay debt
+				return Err((n, 7));
+			}
+			// process debt and nonce
+			current_bal -= current_debt;
 			balances.insert(String::from(args[0]), current_bal);
+			let expected_nonce = nonces.entry(String::from(args[0])).or_insert(0);
+			*expected_nonce += 1;
 		}
 	}
 	Ok(())
 }
 
-pub fn build_balances(highest_block: &u128) {
-	if verify_blocks(highest_block).is_err() {
-		panic!("Cannot build balances for invalid chain");
-	}
-
+// It is very important to verify that the chain is valid before building balances and nonces
+pub fn build_balances_and_nonces(highest_block: &u128) {
 	let mut balances: HashMap<String, u128> = HashMap::new();
+	let mut nonces: HashMap<String, u128> = HashMap::new();
 
 	// process fund movement
 	for n in 1..=*highest_block {
@@ -184,19 +214,29 @@ pub fn build_balances(highest_block: &u128) {
 			if com.0 == "A" { // A for Add balance
 				let parsed_bal = args[1].parse::<u128>();
 				current_bal += parsed_bal.unwrap();
-			} else if com.0 == "C" { // C for Check-in
-				current_bal -= 1;
+			} else if com.0 == "C" || com.0 == "F" { // C for Check-in, F for add file
+				current_bal -= get_command_cost(&com.0, &args);
 			}
 			if current_bal > 0 {
 				balances.insert(String::from(args[0]), current_bal);
 			}
+
+			let expected_nonce = nonces.entry(String::from(args[0])).or_insert(0);
+			*expected_nonce += 1;
 		}
 	}
-	let keys: Vec<_> = balances.keys().cloned().collect();
+	let bal_keys: Vec<_> = balances.keys().cloned().collect();
 	let mut raw_balances_data = String::new();
-	for key in keys {
+	for key in bal_keys {
 		let bal = balances.get(&key).unwrap().to_owned();
 		raw_balances_data += &(key + " " + bal.to_string().as_str() + "\n");
+	}
+
+	let nonce_keys: Vec<_> = nonces.keys().cloned().collect();
+	let mut raw_nonces_data = String::new();
+	for key in nonce_keys {
+		let nonce = nonces.get(&key).unwrap().to_owned();
+		raw_nonces_data += &(key + " " + nonce.to_string().as_str() + "\n");
 	}
 
 	let mut save_file = fs::OpenOptions::new()
@@ -205,37 +245,14 @@ pub fn build_balances(highest_block: &u128) {
         .truncate(true)
         .open("../data/balances.txt").unwrap();
 
+	let mut save_file_2 = fs::OpenOptions::new()
+        .write(true)
+		.create(true)
+        .truncate(true)
+        .open("../data/nonces.txt").unwrap();
+
 	let _ = save_file.write(raw_balances_data.as_bytes()).unwrap();
-}
-
-pub fn read_balances_to_var(balances: &mut HashMap<String, u128>) -> Result<(), ()> {
-	let file = File::open("../data/balances.txt");
-	// no changes to balances if file does not exist
-	if file.is_err() {
-		return Ok(());
-	}
-
-	let file = file.unwrap();
-	let reader = BufReader::new(file);
-
-	// read each line in balances file
-    for line in reader.lines().flatten() {
-        let parts: Vec<&str> = line.split(' ').collect();
-        if parts.len() == 2 {
-            let key = parts[0].to_string();
-            let value_maybe = parts[1].to_string().parse();
-			if let Ok(value) = value_maybe {
-				balances.insert(key, value);
-			} else {
-				return Err(());
-			}
-        } else {
-			// err on invalid line
-			return Err(());
-		}
-    }
-
-	Ok(())
+	let _ = save_file_2.write(raw_nonces_data.as_bytes()).unwrap();
 }
 
 pub fn find_highest_block_num() -> u128 {
@@ -256,4 +273,36 @@ pub fn find_highest_block_num() -> u128 {
 	}
 
 	highest_block_num
+}
+
+// it is important to verify chain validity before this
+pub fn build_last_checkin(highest_block: &u128) -> Result<(), ()> {
+	// last checkin block of address
+	let mut last_checkins: HashMap<String, u128> = HashMap::new();
+
+	for n in 1..=*highest_block {
+		let coms = read_block_commands(&n).unwrap();
+		for com in coms {
+			if com.0 == "C" {
+				let args = com.1.split(' ').collect::<Vec<&str>>();
+				let addr = args[0].to_string();
+				last_checkins.insert(addr, n);
+			}
+		}
+	}
+
+	let mut save_file = fs::OpenOptions::new()
+        .write(true)
+		.create(true)
+        .truncate(true)
+        .open("../data/last_checkins.txt").unwrap();
+
+	for (key, value) in last_checkins {
+		let s = save_file.write(format!("{} {}\n", key, value).as_bytes());
+		if s.is_err() {
+			return Err(());
+		}
+	}
+
+	Ok(())
 }

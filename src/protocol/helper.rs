@@ -1,5 +1,7 @@
 use std::fs;
 use sha2::{ Digest, Sha256 };
+use ethers_core::types::{ Signature, RecoveryMessage };
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct BlockHeaders {
@@ -56,38 +58,19 @@ pub fn read_block_commands(block_num: &u128) -> Result<Vec<(String, String)>, St
 
     for line in raw_data_split {
         let words = line.split(' ').collect::<Vec<_>>();
-		// let mut this_command = Vec::new();
-		// this_command.push((words[0].to_string(), words[1].to_string()));
-		if words.len() == 2 {
-			commands.push((words[0].to_string(), words[1].to_string()));
-		} else if words.len() == 3 {
-			commands.push((
-				words[0].to_string(),
-				words[1].to_string() + " " + words[2]
-			));
-		} else if words.len() == 4 {
-			commands.push((
-				words[0].to_string(),
-				words[1].to_string() + " " + words[2] + " " + words[3]
-			));
+		let command_args = words[1..].join(" ");
+
+		if words[0].is_empty() {
+			continue;
 		}
+
+		commands.push((
+			String::from(words[0]),
+			command_args
+		));
     }
 
 	Ok(commands)
-}
-
-pub fn read_balance(owner: &String) -> u128 {
-	let raw_data = fs::read_to_string("../data/balances.txt").unwrap();
-	let raw_data_split = raw_data.split('\n').collect::<Vec<_>>();
-
-	for line in raw_data_split {
-		if line.starts_with(owner) {
-			let line_split = line.split(' ').collect::<Vec<_>>();
-			return line_split[1].parse().expect("Sad");
-		}
-	}
-
-	0
 }
 
 pub fn parse_command_string(com_str: &String) -> Result<Vec<String>, String> {
@@ -95,7 +78,11 @@ pub fn parse_command_string(com_str: &String) -> Result<Vec<String>, String> {
 		return Err(String::from("Zero-length string"));
 	}
 
-	let valid_commands: Vec<char> = vec!['A', 'C'];
+	// Command syntax:
+	// C <Address> - Check in
+	// A <Address> <Amount> <Eth tx hash> - Add balance
+	// F <Address> <Hash> - add file hash
+	let valid_commands: Vec<char> = vec!['A', 'C', 'F'];
     let data_command_char = com_str.chars().next();
     let valid_command_char = valid_commands.iter().any(|&c| {
         data_command_char == Some(c)
@@ -109,4 +96,35 @@ pub fn parse_command_string(com_str: &String) -> Result<Vec<String>, String> {
 		.map(String::from)
 		.collect::<Vec<String>>();
 	Ok(data_split)
+}
+
+// recover eth signer to 0x.... string
+pub fn recover_eth_signer(message: &str, sig: &str) -> Result<String, ()> {
+	let msg_obj = RecoveryMessage::from(message);
+	let sig_obj = Signature::from_str(sig);
+
+	if sig_obj.is_err() {
+		return Err(());
+	}
+
+	let sig_obj = sig_obj.unwrap();
+	let res = sig_obj.recover(msg_obj);
+	if let Ok(addr) = res {
+		Ok(format!("{:?}", addr))
+	} else {
+		Err(())
+	}
+}
+
+pub fn get_command_cost(command_letter: &String, _command_params: &[&str]) -> u128 {
+	// check-in always costs 1
+	if command_letter == "C" {
+		1
+	} else if command_letter == "A" {
+		// no cost with adding balance
+		return 0;
+	} else {
+		// other commands are 100
+		return 100;
+	}
 }
