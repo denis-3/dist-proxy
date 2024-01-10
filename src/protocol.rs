@@ -117,6 +117,7 @@ pub fn verify_blocks(highest_block: &u128) -> Result<(), (u128, u128)> {
 		let raw_data_result = read_block_file(&n);
 		let this_bh_result = read_block_headers(&n);
 		if raw_data_result.is_err() {
+			// general reading error
 			return Err((n, 1));
 		}
 		let raw_data = raw_data_result.unwrap();
@@ -125,10 +126,12 @@ pub fn verify_blocks(highest_block: &u128) -> Result<(), (u128, u128)> {
 		// check this block hash
 		let computed_hash = quick_sha256(&raw_data[65..].to_string());
 		if this_bh.block_hash != computed_hash.as_str() {
+			// expected and actual block hash are different
 			return Err((n, 2));
 		}
 
 		if this_bh.number != prev_bh.number + 1 {
+			// incorrect block number header
 			return Err((n, 3));
 		}
 
@@ -139,6 +142,7 @@ pub fn verify_blocks(highest_block: &u128) -> Result<(), (u128, u128)> {
 
 		// check previous block hash
 		if this_bh.prev_block_hash != prev_bh.block_hash {
+			// previous block hash header is incorrect
 			return Err((n, 5));
 		}
 		prev_bh.block_hash = computed_hash;
@@ -161,7 +165,7 @@ pub fn verify_blocks(highest_block: &u128) -> Result<(), (u128, u128)> {
 			let addr = recover_eth_signer(&sig, args[args.len() - 1]);
 			if let Ok(result) = addr {
 				if result != args[0] {
-					// address mismatch
+					// address mismatch (incorrect signature)
 					return Err((n, 9));
 				}
 			} else {
@@ -177,6 +181,7 @@ pub fn verify_blocks(highest_block: &u128) -> Result<(), (u128, u128)> {
 				if let Ok(parsed_bal_ok) = parsed_bal {
 					current_bal += parsed_bal_ok;
 				} else {
+					// error parsing command arg
 					return Err((n, 6));
 				}
 			} else if com.0 == "C" || com.0 == "F" { // C for Check-in

@@ -443,8 +443,13 @@ async fn main() {
 			}
 
 			// subtract balance and add to nonce
-			balances.update(&com_data[1], move |b| b - command_cost).unwrap();
-			nonces.update(&com_data[1], |n| n + 1).unwrap();
+			if balances.contains_key(&com_data[1]).unwrap() {
+				balances.update(&com_data[1], move |b| b - command_cost).unwrap();
+				nonces.update(&com_data[1], |n| n + 1).unwrap();
+			} else {
+				balances.insert(&com_data[1], 0).unwrap();
+				nonces.insert(&com_data[1], 1).unwrap();
+			}
 
 			// send response
 

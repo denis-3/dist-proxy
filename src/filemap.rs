@@ -94,6 +94,22 @@ impl FileMap<'_> {
 		Ok(res.0)
 	}
 
+	// check if key is present
+	pub fn contains_key(&self, key: &str) -> Result<bool, String> {
+		let res = self.get(key);
+		if let Err(err) = res {
+			if err == String::from("Key does not exist") {
+				return Ok(false);
+			} else {
+				return Err(err);
+			}
+		} else if let Ok(_) = res {
+			return Ok(true);
+		} else {
+			return Err(String::from("How did we get here?"));
+		}
+	}
+
 	// change value of key without looking for the key (assuming key exists)
 	pub fn insert_given_position(&self, key: &str, value: u128, old_data: (u128, usize)) -> Result<(), String> {
 		let to_insert = format!("{} {}\n", key, value);
@@ -137,7 +153,7 @@ impl FileMap<'_> {
 		Ok(())
 	}
 
-	pub fn update<F>(&self, key: &str, upd_closure: F) -> Result<(), String>
+	pub fn update<F>(&self, key: &str, upd_closure: F, ) -> Result<(), String>
 	where F: Fn(u128) -> u128, {
 		let old_data = self.get_value_and_position(key)?;
 		let new_value = upd_closure(old_data.0);
